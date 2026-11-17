@@ -43,8 +43,48 @@ def custom_transform(example):
     # how you could implement two of them --- synonym replacement and typos.
 
     # You should update example["text"] using your transformation
+    # AI usage: ChatGPT generated neighbors
+    keyboard_neighbors = {
+        "a": "qwsz", "b": "vghn", "c": "xdfv",
+        "d": "serfcx", "e": "wsdr", "f": "drtgvc",
+        "g": "ftyhbv", "h": "gyujnb", "i": "ujko",
+        "j": "huikmn", "k": "jiolm", "l": "kop",
+        "m": "njk", "n": "bhjm", "o": "iklp",
+        "p": "ol", "q": "wa", "r": "edft",
+        "s": "awedxz", "t": "rfgy", "u": "yhji",
+        "v": "cfgb", "w": "qase", "x": "zsdc",
+        "y": "tghu", "z": "asx"
+    }
 
-    raise NotImplementedError
+    # split into words
+    words = example["text"].split()
+    transformed_words = []
+    for word in words:
+        if random.random() < 0.2: # 0.2 prob of being modified (typo)
+            # find positions which contain characters that have entries in keyboard_neighbors
+            positions = [
+                i for i, char in enumerate(word)
+                if char.lower() in keyboard_neighbors
+            ]
+            if positions:
+                # randomly select a charactor position and randomly choose a neighbor of that character
+                i = random.choice(positions)
+                original_char = word[i]
+                replacement = random.choice(
+                    keyboard_neighbors[original_char.lower()]
+                )
+                if original_char.isupper():
+                    replacement = replacement.upper()
+
+                # replace the one character in word
+                word = word[:i] + replacement + word[i+1:]
+
+        # append original or modified word
+        transformed_words.append(word)
+
+    example["text"] = " ".join(transformed_words)
+
+    # raise NotImplementedError
 
     ##### YOUR CODE ENDS HERE ######
 
