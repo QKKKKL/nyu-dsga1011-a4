@@ -72,7 +72,7 @@ def custom_transform(example):
     transformed_words = []
 
     # typo and synonym replacement prob
-    typo_prob = 0.2
+    typo_prob = 0.25
     synonym_prob = 0.1
     for word in words:
         r = random.random()
