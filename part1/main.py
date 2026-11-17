@@ -47,7 +47,7 @@ def do_train(args, model, train_dataloader, save_dir="./out"):
     for epoch in range(num_epochs):
         for batch in train_dataloader:
             batch = {k: v.to(device) for k, v in batch.items()}
-            
+
             optimizer.zero_grad()
             outputs = model(**batch)
             loss = outputs.loss
@@ -105,7 +105,23 @@ def create_augmented_dataloader(args, dataset):
     # dataloader will be for the original training split augmented with 5k random transformed examples from the training set.
     # You may find it helpful to see how the dataloader was created at other place in this code.
 
-    raise NotImplementedError
+    transformed_examples = dataset["train"].shuffle(seed=42).select(range(5000))
+    transformed_examples = transformed_examples.map(custom_transform, load_from_cache_file=False)
+    
+    augmented_dataset = datasets.concatenate_datasets([dataset["train"], transformed_examples])
+    augmented_dataset = augmented_dataset.map(tokenize_function, batched=True)
+
+    augmented_dataset = augmented_dataset.remove_columns(["text"])
+    augmented_dataset = augmented_dataset.rename_column("label", "labels")
+    augmented_dataset.set_format("torch")
+
+    train_dataloader = DataLoader(augmented_dataset, shuffle=True, batch_size=args.batch_size)
+
+    # for debug
+    print("Augmented examples:", len(augmented_dataset))
+    print("Training batches:", len(train_dataloader))   
+
+    # raise NotImplementedError
 
     ##### YOUR CODE ENDS HERE ######
 
