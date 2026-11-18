@@ -30,7 +30,9 @@ class T5Dataset(Dataset):
         self.split = split
         self.tokenizer = T5TokenizerFast.from_pretrained('google-t5/t5-small')
         # beginning of sentence token
-        self.start_token_id = self.tokenizer.convert_tokens_to_ids("<extra_id_0>")
+        # self.start_token_id = self.tokenizer.convert_tokens_to_ids("<extra_id_0>")
+        # use T5's default decoder start token (PAD ID 0)
+        self.start_token_id = self.tokenizer.pad_token_id
         self.process_data(data_folder, split, self.tokenizer)
 
     def process_data(self, data_folder, split, tokenizer):
