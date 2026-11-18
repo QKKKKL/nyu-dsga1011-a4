@@ -174,6 +174,8 @@ def eval_epoch(args, model, dev_loader, gt_sql_pth, model_sql_path, gt_record_pa
             generated_ids = model.generate(input_ids=encoder_input, attention_mask=encoder_mask, decoder_input_ids=initial_decoder_inputs, max_new_tokens=512, num_beams=1)
 
             queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            # new: replace back the operator
+            queries = [sql.replace("LT_OPERATOR", "<") for sql in queries]
             generated_queries.extend(queries)
 
     eval_loss = total_loss / total_tokens

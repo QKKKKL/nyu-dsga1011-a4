@@ -43,7 +43,10 @@ class T5Dataset(Dataset):
 
         if split != "test":
             self.raw_sql = load_lines(os.path.join(data_folder, f"{split}.sql"))
-            self.processed_sql = self.raw_sql.copy()
+            # self.processed_sql = self.raw_sql.copy()
+
+            # replace unsupported SQL operator before tokenization
+            self.processed_sql = [sql.replace("<", "LT_OPERATOR") for sql in self.raw_sql]
 
             self.sql_ids = [tokenizer.encode(sql) for sql in self.processed_sql]
 
