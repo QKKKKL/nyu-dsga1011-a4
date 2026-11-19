@@ -170,8 +170,9 @@ def eval_epoch(args, model, dev_loader, gt_sql_pth, model_sql_path, gt_record_pa
             total_loss += loss.item() * num_tokens
             total_tokens += num_tokens
 
-            # generate sql with greedy decoding
-            generated_ids = model.generate(input_ids=encoder_input, attention_mask=encoder_mask, decoder_input_ids=initial_decoder_inputs, max_new_tokens=512, num_beams=1)
+            # old: generate sql with greedy decoding
+            # update: beam = 3
+            generated_ids = model.generate(input_ids=encoder_input, attention_mask=encoder_mask, decoder_input_ids=initial_decoder_inputs, max_new_tokens=512, num_beams=3)
 
             # queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             # new: do not cleanup generated sql
@@ -207,8 +208,9 @@ def test_inference(args, model, test_loader, model_sql_path, model_record_path):
             encoder_mask = encoder_mask.to(DEVICE)
             initial_decoder_inputs = initial_decoder_inputs.to(DEVICE)
 
-            # generate sql with greedy decoding
-            generated_ids = model.generate(input_ids=encoder_input, attention_mask=encoder_mask, decoder_input_ids=initial_decoder_inputs, max_new_tokens=512, num_beams=1)
+            # old: generate sql with greedy decoding
+            # update: beam = 3
+            generated_ids = model.generate(input_ids=encoder_input, attention_mask=encoder_mask, decoder_input_ids=initial_decoder_inputs, max_new_tokens=512, num_beams=3)
 
             # queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             # new: do not cleanup generated sql
