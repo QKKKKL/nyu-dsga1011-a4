@@ -177,7 +177,7 @@ def eval_epoch(args, model, dev_loader, gt_sql_pth, model_sql_path, gt_record_pa
             # new: do not cleanup generated sql
             queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             # new: replace back the operator
-            queries = [sql.replace("LT_OPERATOR", "<") for sql in queries]
+            # place("LT_OPERATOR", "<") for sql in queries]
             generated_queries.extend(queries)
 
     eval_loss = total_loss / total_tokens
@@ -214,7 +214,7 @@ def test_inference(args, model, test_loader, model_sql_path, model_record_path):
             # new: do not cleanup generated sql
             queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             # new: replace back the operator
-            queries = [sql.replace("LT_OPERATOR", "<") for sql in queries]
+            # place("LT_OPERATOR", "<") for sql in queries]
             generated_queries.extend(queries)
 
     os.makedirs(os.path.dirname(model_sql_path), exist_ok=True)
@@ -233,6 +233,9 @@ def main():
     # Load the data and the model
     train_loader, dev_loader, test_loader = load_t5_data(args.batch_size, args.test_batch_size)
     model = initialize_model(args)
+    # new v6
+    model.resize_token_embeddings(len(train_loader.dataset.tokenizer))
+
     optimizer, scheduler = initialize_optimizer_and_scheduler(args, model, len(train_loader))
 
     # Train 
