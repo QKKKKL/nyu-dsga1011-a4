@@ -121,6 +121,8 @@ def train_epoch(args, model, train_loader, optimizer, scheduler):
         non_pad = decoder_targets != PAD_IDX
         loss = criterion(logits[non_pad], decoder_targets[non_pad])
         loss.backward()
+        # update v9: gradient clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
         if scheduler is not None: 
             scheduler.step()
