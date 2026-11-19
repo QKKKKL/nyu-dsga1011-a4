@@ -29,6 +29,8 @@ class T5Dataset(Dataset):
         # TODO
         self.split = split
         self.tokenizer = T5TokenizerFast.from_pretrained('google-t5/t5-small')
+        # new for version 6, not using LT_OPERATOR but add < as a normal token
+        self.tokenizer.add_tokens(["<"])
         # beginning of sentence token
         # self.start_token_id = self.tokenizer.convert_tokens_to_ids("<extra_id_0>")
         # use T5's default decoder start token (PAD ID 0)
@@ -45,10 +47,10 @@ class T5Dataset(Dataset):
 
         if split != "test":
             self.raw_sql = load_lines(os.path.join(data_folder, f"{split}.sql"))
-            # self.processed_sql = self.raw_sql.copy()
+            self.processed_sql = self.raw_sql.copy()
 
             # replace unsupported SQL operator before tokenization
-            self.processed_sql = [sql.replace("<", "LT_OPERATOR") for sql in self.raw_sql]
+            # self.processed_sql = [sql.replace("<", "LT_OPERATOR") for sql in self.raw_sql]
 
             self.sql_ids = [tokenizer.encode(sql) for sql in self.processed_sql]
 
