@@ -30,7 +30,9 @@ class T5Dataset(Dataset):
         self.split = split
         self.tokenizer = T5TokenizerFast.from_pretrained('google-t5/t5-small')
         # new for version 6, not using LT_OPERATOR but add < as a normal token
-        self.tokenizer.add_tokens(["<"])
+        # self.tokenizer.add_tokens(["<"])
+        # v9 update
+        self.tokenizer.add_tokens(["<", "<="])
         # beginning of sentence token
         # self.start_token_id = self.tokenizer.convert_tokens_to_ids("<extra_id_0>")
         # use T5's default decoder start token (PAD ID 0)
