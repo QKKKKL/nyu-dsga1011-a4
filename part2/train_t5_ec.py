@@ -228,6 +228,18 @@ def test_inference(args, model, test_loader, model_sql_path, model_record_path):
 def main():
     # Get key arguments
     args = get_args()
+
+    # making sure not using the pretrained T5 and set random seed
+    assert not args.finetune, "EC must train T5 from scratch"
+    import random
+    random.seed(42)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(42)
+
+    print("Extra Credit: T5 from scratch, seed = 42")
+
     if args.use_wandb:
         # Recommended: Using wandb (or tensorboard) for result logging can make experimentation easier
         setup_wandb(args)
