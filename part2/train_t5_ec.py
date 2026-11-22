@@ -9,7 +9,7 @@ import wandb
 
 from t5_utils import initialize_model, initialize_optimizer_and_scheduler, save_model, load_model_from_checkpoint, setup_wandb
 from transformers import GenerationConfig
-from load_data import load_t5_data
+# from load_data import load_t5_data
 from utils import compute_metrics, save_queries_and_records
 
 DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -244,6 +244,10 @@ def main():
         # Recommended: Using wandb (or tensorboard) for result logging can make experimentation easier
         setup_wandb(args)
 
+    if args.experiment_name == "v4":
+        from load_data_ec import load_t5_data
+    else:
+        from load_data import load_t5_data
     # Load the data and the model
     train_loader, dev_loader, test_loader = load_t5_data(args.batch_size, args.test_batch_size)
     model = initialize_model(args)
