@@ -12,6 +12,8 @@ from transformers import GenerationConfig
 from load_data import load_t5_data
 from utils import compute_metrics, save_queries_and_records
 
+import random
+
 DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 PAD_IDX = 0
 
@@ -52,6 +54,11 @@ def get_args():
     parser.add_argument('--skip_test', action='store_true',
                         help="Skip test inference during experiments")
 
+    # allow flexible dev eval frequency, fix random seed
+    parser.add_argument('--eval_every', type=int, default=1,
+                    help="Run full SQL evaluation every N epochs")
+    parser.add_argument('--seed', type=int, default=42)
+
     args = parser.parse_args()
     return args
 
@@ -60,44 +67,132 @@ def train(args, model, train_loader, dev_loader, optimizer, scheduler):
     epochs_since_improvement = 0
 
     model_type = 'ft' if args.finetune else 'scr'
-    checkpoint_dir = os.path.join('checkpoints', f'{model_type}_experiments', args.experiment_name)
-    gt_sql_path = os.path.join(f'data/dev.sql')
-    gt_record_path = os.path.join(f'records/ground_truth_dev.pkl')
-    model_sql_path = os.path.join(f'results/t5_{model_type}_{args.experiment_name}_dev.sql')
-    model_record_path = os.path.join(f'records/t5_{model_type}_{args.experiment_name}_dev.pkl')
-    for epoch in range(args.max_n_epochs):
-        tr_loss = train_epoch(args, model, train_loader, optimizer, scheduler)
-        print(f"Epoch {epoch}: Average train loss was {tr_loss}")
+    checkpoint_dir = os.path.join(
+        'checkpoints', f'{model_type}_experiments', args.experiment_name
+    )
 
-        eval_loss, record_f1, record_em, sql_em, error_rate = eval_epoch(args, model, dev_loader,
-                                                                         gt_sql_path, model_sql_path,
-                                                                         gt_record_path, model_record_path)
-        print(f"Epoch {epoch}: Dev loss: {eval_loss}, Record F1: {record_f1}, Record EM: {record_em}, SQL EM: {sql_em}")
-        print(f"Epoch {epoch}: {error_rate*100:.2f}% of the generated outputs led to SQL errors")
+    gt_sql_path = 'data/dev.sql'
+    gt_record_path = 'records/ground_truth_dev.pkl'
+    model_sql_path = f'results/t5_{model_type}_{args.experiment_name}_dev.sql'
+    model_record_path = f'records/t5_{model_type}_{args.experiment_name}_dev.pkl'
+
+    for epoch in range(args.max_n_epochs):
+        tr_loss = train_epoch(
+            args, model, train_loader, optimizer, scheduler
+        )
+        print(f"Epoch {epoch + 1}: Average train loss was {tr_loss}")
+
+        # Full SQL evaluation every 2 epochs
+        run_generation = (epoch + 1) % args.eval_every == 0
+
+        eval_loss, record_f1, record_em, sql_em, error_rate = eval_epoch(
+            args, model, dev_loader,
+            gt_sql_path, model_sql_path,
+            gt_record_path, model_record_path,
+            run_generation=run_generation
+        )
+
+        print(f"Epoch {epoch + 1}: Dev loss: {eval_loss}")
+
+        if run_generation:
+            print(
+                f"Epoch {epoch + 1}: "
+                f"Record F1: {record_f1:.4%}, "
+                f"Record EM: {record_em:.4%}, "
+                f"SQL EM: {sql_em:.4%}"
+            )
+            print(
+                f"Epoch {epoch + 1}: "
+                f"SQL error rate: {error_rate:.2%}"
+            )
+        else:
+            print("Full SQL evaluation skipped.")
 
         if args.use_wandb:
             result_dict = {
-                'train/loss' : tr_loss,
-                'dev/loss' : eval_loss,
-                'dev/record_f1' : record_f1,
-                'dev/record_em' : record_em,
-                'dev/sql_em' : sql_em,
-                'dev/error_rate' : error_rate,
+                'train/loss': tr_loss,
+                'dev/loss': eval_loss
             }
+
+            if run_generation:
+                result_dict.update({
+                    'dev/record_f1': record_f1,
+                    'dev/record_em': record_em,
+                    'dev/sql_em': sql_em,
+                    'dev/error_rate': error_rate
+                })
+
             wandb.log(result_dict, step=epoch)
 
-        if record_f1 > best_f1:
-            best_f1 = record_f1
-            epochs_since_improvement = 0
-        else:
-            epochs_since_improvement += 1
-
+        # Save latest checkpoint every epoch
         save_model(checkpoint_dir, model, best=False)
-        if epochs_since_improvement == 0:
-            save_model(checkpoint_dir, model, best=True)
 
-        if epochs_since_improvement >= args.patience_epochs:
-            break
+        # Update best checkpoint only after full SQL evaluation
+        if run_generation:
+            if record_f1 > best_f1:
+                best_f1 = record_f1
+                epochs_since_improvement = 0
+
+                save_model(checkpoint_dir, model, best=True)
+                print(
+                    f"New best checkpoint saved. "
+                    f"Best Record F1: {best_f1:.4%}"
+                )
+
+            else:
+                epochs_since_improvement += args.eval_every
+
+            # Patience 0 means early stopping is disabled
+            if (
+                args.patience_epochs > 0
+                and epochs_since_improvement >= args.patience_epochs
+            ):
+                print("Early stopping triggered.")
+                break
+
+# def train(args, model, train_loader, dev_loader, optimizer, scheduler):
+#     best_f1 = -1
+#     epochs_since_improvement = 0
+
+#     model_type = 'ft' if args.finetune else 'scr'
+#     checkpoint_dir = os.path.join('checkpoints', f'{model_type}_experiments', args.experiment_name)
+#     gt_sql_path = os.path.join(f'data/dev.sql')
+#     gt_record_path = os.path.join(f'records/ground_truth_dev.pkl')
+#     model_sql_path = os.path.join(f'results/t5_{model_type}_{args.experiment_name}_dev.sql')
+#     model_record_path = os.path.join(f'records/t5_{model_type}_{args.experiment_name}_dev.pkl')
+#     for epoch in range(args.max_n_epochs):
+#         tr_loss = train_epoch(args, model, train_loader, optimizer, scheduler)
+#         print(f"Epoch {epoch}: Average train loss was {tr_loss}")
+
+#         eval_loss, record_f1, record_em, sql_em, error_rate = eval_epoch(args, model, dev_loader,
+#                                                                          gt_sql_path, model_sql_path,
+#                                                                          gt_record_path, model_record_path)
+#         print(f"Epoch {epoch}: Dev loss: {eval_loss}, Record F1: {record_f1}, Record EM: {record_em}, SQL EM: {sql_em}")
+#         print(f"Epoch {epoch}: {error_rate*100:.2f}% of the generated outputs led to SQL errors")
+
+#         if args.use_wandb:
+#             result_dict = {
+#                 'train/loss' : tr_loss,
+#                 'dev/loss' : eval_loss,
+#                 'dev/record_f1' : record_f1,
+#                 'dev/record_em' : record_em,
+#                 'dev/sql_em' : sql_em,
+#                 'dev/error_rate' : error_rate,
+#             }
+#             wandb.log(result_dict, step=epoch)
+
+#         if record_f1 > best_f1:
+#             best_f1 = record_f1
+#             epochs_since_improvement = 0
+#         else:
+#             epochs_since_improvement += 1
+
+#         save_model(checkpoint_dir, model, best=False)
+#         if epochs_since_improvement == 0:
+#             save_model(checkpoint_dir, model, best=True)
+
+#         if epochs_since_improvement >= args.patience_epochs:
+#             break
 
 def train_epoch(args, model, train_loader, optimizer, scheduler):
     model.train()
@@ -133,8 +228,9 @@ def train_epoch(args, model, train_loader, optimizer, scheduler):
             total_tokens += num_tokens
 
     return total_loss / total_tokens
-        
-def eval_epoch(args, model, dev_loader, gt_sql_pth, model_sql_path, gt_record_path, model_record_path):
+
+# added run_generation
+def eval_epoch(args, model, dev_loader, gt_sql_pth, model_sql_path, gt_record_path, model_record_path, run_generation=True):
     '''
     You must implement the evaluation loop to be using during training. We recommend keeping track
     of the model loss on the SQL queries, the metrics compute_metrics returns (save_queries_and_records should be helpful)
@@ -171,28 +267,63 @@ def eval_epoch(args, model, dev_loader, gt_sql_pth, model_sql_path, gt_record_pa
             num_tokens = non_pad.sum().item()
             total_loss += loss.item() * num_tokens
             total_tokens += num_tokens
+            
+            if run_generation:
+                generated_ids = model.generate(
+                    input_ids=encoder_input,
+                    attention_mask=encoder_mask,
+                    decoder_input_ids=initial_decoder_inputs,
+                    max_new_tokens=512,
+                    num_beams=2
+                )
 
-            # generate sql with greedy decoding
-            generated_ids = model.generate(input_ids=encoder_input, attention_mask=encoder_mask, decoder_input_ids=initial_decoder_inputs, max_new_tokens=512, num_beams=2)
+                queries = tokenizer.batch_decode(
+                    generated_ids,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False
+                )
+                generated_queries.extend(queries)
 
-            # queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-            # new: do not cleanup generated sql
-            queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-            # new: replace back the operator
-            # place("LT_OPERATOR", "<") for sql in queries]
-            generated_queries.extend(queries)
+            # # generate sql with greedy decoding
+            # generated_ids = model.generate(input_ids=encoder_input, attention_mask=encoder_mask, decoder_input_ids=initial_decoder_inputs, max_new_tokens=512, num_beams=2)
+
+            # # queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            # # new: do not cleanup generated sql
+            # queries = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+            # # new: replace back the operator
+            # # place("LT_OPERATOR", "<") for sql in queries]
+            # generated_queries.extend(queries)
 
     eval_loss = total_loss / total_tokens
 
+    if not run_generation:
+        return eval_loss, None, None, None, None
+
     os.makedirs(os.path.dirname(model_sql_path), exist_ok=True)
     os.makedirs(os.path.dirname(model_record_path), exist_ok=True)
-    save_queries_and_records(generated_queries, model_sql_path, model_record_path)
 
-    # compute eval metrics
-    sql_em, record_em, record_f1, error_msgs = compute_metrics(gt_sql_pth, model_sql_path, gt_record_path, model_record_path)
+    save_queries_and_records(
+        generated_queries, model_sql_path, model_record_path
+    )
+
+    sql_em, record_em, record_f1, error_msgs = compute_metrics(
+        gt_sql_pth, model_sql_path, gt_record_path, model_record_path
+    )
+
     error_rate = sum(bool(msg) for msg in error_msgs) / len(error_msgs)
 
     return eval_loss, record_f1, record_em, sql_em, error_rate
+    # eval_loss = total_loss / total_tokens
+
+    # os.makedirs(os.path.dirname(model_sql_path), exist_ok=True)
+    # os.makedirs(os.path.dirname(model_record_path), exist_ok=True)
+    # save_queries_and_records(generated_queries, model_sql_path, model_record_path)
+
+    # # compute eval metrics
+    # sql_em, record_em, record_f1, error_msgs = compute_metrics(gt_sql_pth, model_sql_path, gt_record_path, model_record_path)
+    # error_rate = sum(bool(msg) for msg in error_msgs) / len(error_msgs)
+
+    # return eval_loss, record_f1, record_em, sql_em, error_rate
         
 def test_inference(args, model, test_loader, model_sql_path, model_record_path):
     '''
@@ -231,12 +362,11 @@ def main():
 
     # making sure not using the pretrained T5 and set random seed
     assert not args.finetune, "EC must train T5 from scratch"
-    import random
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(42)
+        torch.cuda.manual_seed_all(args.seed)
 
     print("Extra Credit: T5 from scratch, seed = 42")
 
