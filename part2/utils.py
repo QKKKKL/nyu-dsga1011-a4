@@ -94,7 +94,8 @@ def compute_records(processed_qs: List[str]):
     # num_threads = 10
     # timeout_secs = 120
     num_threads = 5
-    timeout_secs = 240
+    # timeout_secs = 240
+    timeout_secs = 480
 
     pool = ThreadPoolExecutor(num_threads)
     futures = []
